@@ -1,0 +1,22 @@
+aliases:
+  label: col8 logistic
+  weight: col9
+  tag: ''
+
+features:
+  col1: list
+  col2:
+    - bin 1,2,4,8,16
+    - clip 0 7
+  col3:
+    - cat
+    - num log
+  col4*: num
+  col6: bool
+  col7: raw
+
+header: col1,col2,col3,col4_1,col4_2,col5,col6,col7,col8,col9
+
+namespaces:
+  a: "col1 col2 col3"
+  b: "col4* col5"
