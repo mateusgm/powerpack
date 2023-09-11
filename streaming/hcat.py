@@ -2,13 +2,13 @@
 # vim: syntax=python
 #
 # usage:
-#   hadoop_cat.py  mydb.mytable > table.tsv 
+#   hcat.py  mydb.mytable > table.tsv
 #
 # to save partitioned gz files:
-#   hadoop_cat.py mydb.mytable -p /tmp/dataset
+#   hcat.py mydb.mytable -p /tmp/dataset
 #
 # to stream files through a mapper in parallel:
-#   hadoop_cat.py mydb.mytable -m my_parser.py 
+#   hcat.py mydb.mytable -m my_parser.py
 #
 from __future__ import print_function
 
@@ -19,7 +19,6 @@ import random
 import tempfile
 import subprocess as sb
 import multiprocessing as mp
-import dsmultitools.hadoop_helper as hadoop
 
 parser = argparse.ArgumentParser()
 parser.add_argument('path', help='Hive table or hdfs path')
@@ -29,21 +28,18 @@ parser.add_argument('-t',         dest='n_threads',         default=0,          
 parser.add_argument('-b',         dest='batch_size',        default=1,          type=int, help='Batch size - number of hdfs files copied per thread')
 parser.add_argument('-s',         dest='sample',            default=None,       type=float, help='Sample probability with which to sample the hdfs files')
 parser.add_argument('-c',         dest='files_cache',       default=None,       help='Cache path for list of hdfs paths, useful if too many partitions')
-parser.add_argument('--host',      dest='host',             default='',         help='Hadoop host to ssh to')
 parser.add_argument('--header',   dest='header',            default='',         help='Mimic header from this table')
+parser.add_argument('--hive_dir', dest='hive_dir',          default='/user/hive/warehouse/', help='Base dir for hive tables')
 parser.add_argument('--eta',      dest='print_eta',         action='store_true', help='Print ETA while downloading')
 parser.add_argument('--fast',     dest='fast',              action='store_true', help='Enable flags to reduce friction: --noheader and --nochars.')
 parser.add_argument('--noheader', dest='noheader',          action='store_true', help='Do not print the header of the table')
 parser.add_argument('--nochars',  dest='nochars',           action='store_true', help='Do not try to deal with hadoop special chars. Use only if you created the table with \'ROW FORMAT DELIMITED FIELDS TERMINATED BY "\\t"\' and you dont have any complex types (arrays and maps).')
-parser.add_argument('--noproxy',  dest='noproxy',           action='store_true', help='Dot not tunnel ssh calls through shell.')
 parser.add_argument('--cmd',      dest='cmd',               action='store_true', help='Do not run the command, only print it. Useful if you want to stream data through ssh and parallel is dropping some chars')
 parser.add_argument('--verbose',  dest='verbose',           action='store_true', help='Print informational messages')
 args = parser.parse_args()
 
-
 cmds        = []
 output_cmds = ''
-ssh_args    = dict(noproxy=args.noproxy, host=args.host)
 
 if args.fast:
     args.noheader = 1
@@ -57,11 +53,38 @@ def info(*msg):
         print(">", *msg, file=sys.stderr)
         sys.stderr.flush()
 
+def get_path(path):
+    if path[:5] in ('gs://', 'hdfs:', '/user'):
+        return path
+
+    if args.hive_dir:
+        return args.hive_dir + path.replace('.', '.db/')
+
+    out = hive('describe formatted '+path, pipe=' | grep Location')
+    return out.strip().split("\t")[-2]
+
+def get_header(table):
+    description = hive('describe '+table)
+    features    = [ ]
+    for l in description.split("\n")[1:]:
+        definition = [ x.strip(" \t'") for x in l.split("\t")[:2] ]
+        if definition[0] == '': continue
+        if '#' == l[0]:         break
+        features.append(definition)
+    return zip(*features)
+
+def hive(query, pipe=''):
+    cmd = "beeline --silent=true --showHeader=true --incremental=true --outputformat=tsv2 -e '{}' 2> /dev/null".format(query)
+    return run(cmd + pipe)
+
+def run(*args):
+    return sb.check_output(' '.join(args), shell=True, universal_newlines=True)
+
 
 # getting files
 
 is_table = False
-path     = hadoop.get_path( args.path, ssh=ssh_args )
+path     = get_path( args.path )
 if path != args.path:
     info( "Relative path detected - assuming hive table" ) 
     is_table = True
@@ -71,7 +94,7 @@ try:
         files = open(args.files_cache, 'r').read().strip().split("\n")
     else:
         exclude = [ 'SUCCESS', '/_temporary', '/.hive-staging' ]
-        files = hadoop.hdfs("-ls -C", path, ssh=ssh_args ).split("\n")
+        files = run("hdfs dfs -ls -C", path).split("\n")
         files = [ f for f in files if f.strip() and sum([ int(e in f) for e in exclude ]) == 0 ]
     info(len(files), "files found")
 
@@ -90,7 +113,7 @@ if args.sample:
 
 # composing command: cat
 
-cmds = [ hadoop.hdfs_cmd('-cat {}') ]
+cmds = [ 'hdfs dfs -cat {}' ]
 
 if '=' in files[0].split('/')[-1]:
     files = [ f+'/*' for f in files ]
@@ -135,7 +158,7 @@ if not args.nochars:
 
 if (is_table and not args.noheader) or args.header:
     info( "Getting header" )
-    header, _ = hadoop.get_header( args.header or args.path, ssh=ssh_args )
+    header, _ = get_header( args.header or args.path )
     if args.partitions_path or args.mapper:
         cmds[0] = "echo -e \"{}\"; {}".format( '\\t'.join(header), cmds[0])
     else:
