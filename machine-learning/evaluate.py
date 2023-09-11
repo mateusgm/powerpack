@@ -7,7 +7,7 @@ import math
 import numpy as np
 import inspect
 import argparse
-import dsmultitools.performance_helper as hlp
+import python.performance_helper as hlp
 
 # helpers
 
