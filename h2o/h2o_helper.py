@@ -3,7 +3,7 @@ from __future__ import absolute_import, print_function
 import h2o
 import logging
 
-# import sys; sys.path.append( '/home/mmelo/git_tree/mmelo-misc/helpers')
+# import sys
 # import h2o_helper as mm_h
 # import h2o
 # from h2o.estimators.gbm import *
