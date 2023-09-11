@@ -32,7 +32,7 @@ def export(model, name=None, path=None):
     model.download_pojo(path=path)
 
 def evaluate_model(model, test, k=10000, label=None):
-    import performance_helper as perf
+    import metrics_helper as perf
 
     print("AUC: ",      model.auc(), model.auc(valid=True))
     print("LOSS: ",     model.logloss(), model.logloss(valid=True))
