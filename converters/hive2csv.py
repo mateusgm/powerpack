@@ -1,1 +1,1 @@
-../streaming/hcat.py
+../hadoop/hcat.py

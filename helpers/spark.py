@@ -37,6 +37,14 @@ def supress_log(logging_off=True):
     logger.LogManager.getLogger("akka").setLevel( level )
 
 
+def profile_spark(func):
+    stageMetrics = sc._jvm.ch.cern.sparkmeasure.StageMetrics(my_spark()._jsparkSession)
+    stageMetrics.begin();
+    print("-------> Result:", func())
+    stageMetrics.end()
+    stageMetrics.printReport()
+
+
 # algorithms
 
 def backfill(callback, _since, _until, step=1):
@@ -49,6 +57,30 @@ def backfill(callback, _since, _until, step=1):
         callback( current )
         current = current + ( -1 if reverse else 1 ) * dt.timedelta(days=STEP)
 
+
+def rank_approx(df, col, bins=100, error=0.0001, min_value=None, null_value=None, dense=True):
+    thresholds = np.around( np.arange(1.0/bins, 1, 1.0/bins ), 3 ).tolist()
+    
+    df_q = df
+    if min_value is not None:
+        df_q = df.where("{} > {}".format(col, min_value))
+    
+    quantiles  = df_q.approxQuantile(col, thresholds, error)
+    if dense:
+        quantiles = np.unique(quantiles)
+    print col, ( "{:.2f} " * len(quantiles) ).format(*quantiles)
+
+    broadcast  = my_spark().sparkContext.broadcast( quantiles.tolist() )
+    min_index  = lambda x,a: ( np.where(np.array(a.value) > x)[0].tolist() + [len(a.value)] )[0] + 1
+    is_null    = lambda v:   v is None or (min_value is not None and v <= min_value)
+    
+    rank_udf   = F.udf(lambda v: null_value if is_null(v) else min_index(v, broadcast), T.IntegerType())
+    return rank_udf(col)
+
+def time_travel(on, over=None, window=None):
+    from pyspark.sql.window import Window
+    return Window.partitionBy(over).orderBy(on) \
+        .rangeBetween(window[0]*86400, window[1]*86400)
 
 # data helpers
 
@@ -72,6 +104,17 @@ def checkpoint(name, df, force=False, partitions=None, user='mmelo'):
     df.write.parquet(path, mode='overwrite')
     return my_spark().read.parquet(path)
 
+def memoize(table, func, *args, **kwargs):
+    version = '_'.join(map(str,args)).replace('-','')
+    table   = '{}_{}'.format(table,version)
+
+    try:
+        return my_spark().table(table)
+
+    except Exception as e:
+        df = func(*args, **kwargs).cache()
+        df.coalesce(100).write.saveAsTable(table, mode='overwrite')
+        return df
 
 def _dataframe_size_java(df):  
     from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -95,15 +138,11 @@ def n_partitions(input_path, size=1024, min_partitions=20, java=False):
     df_size = dataframe_size(input_path, java=java)
     return max(int(df_size / size), min_partitions)
 
-def time_travel(on, over=None, window=None):
-    from pyspark.sql.window import Window
-    return Window.partitionBy(over).orderBy(on) \
-        .rangeBetween(window[0]*86400, window[1]*86400)
 
-def profile_spark(func):
-    stageMetrics = sc._jvm.ch.cern.sparkmeasure.StageMetrics(my_spark()._jsparkSession)
-    stageMetrics.begin();
-    print("-------> Result:", func())
-    stageMetrics.end()
-    stageMetrics.printReport()
+def inspect(df):
+    df = df.cache()
+    sample = df.limit(5).toPandas()
+    print tabulate(sample.T, headers='keys', tablefmt='psql')
+    print df.count()
+
 

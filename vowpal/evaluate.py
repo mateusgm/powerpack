@@ -10,8 +10,8 @@ import inspect
 import argparse
 import numpy as np
 import scipy.stats as st
-import sklearn.metrics        as sk_metrics
-import python.metrics_helper as hlp
+import sklearn.metrics as sk_metrics
+import helpers.metrics as hlp
 
 # helpers
 

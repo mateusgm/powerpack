@@ -13,7 +13,7 @@ import yaml
 import os
 import errno
 import argparse
-import python.vowpal_helper as vw
+import helpers.vowpal as vw
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('exps',     help='Experiments that will overwrite default feature specifications',          nargs='*',                          default=[])
