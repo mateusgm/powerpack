@@ -44,7 +44,7 @@ fi
 if [[ $USE_PYPY == "1" ]]; then
   TOKENS=(${SCRIPT// / })
   BINARY=`command -v ${TOKENS[0]}`
-  SCRIPT="run_pypy.sh ${BINARY:-${TOKENS[0]}} ${TOKENS[@]:1}" 
+  SCRIPT="run-pypy.sh ${BINARY:-${TOKENS[0]}} ${TOKENS[@]:1}" 
 fi
 
 if [[ -d /mnt/disks/local_ssd/ ]]; then

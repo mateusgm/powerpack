@@ -1,4 +1,4 @@
-#!/usr/bin/env run_pypy.sh
+#!/usr/bin/env run-pypy.sh
 
 import sys
 import argparse
