@@ -1,1 +1,0 @@
-../hive/csv-load.py

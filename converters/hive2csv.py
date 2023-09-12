@@ -1,1 +1,0 @@
-../hadoop/hcat.py
